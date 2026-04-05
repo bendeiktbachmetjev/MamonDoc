@@ -16,6 +16,21 @@ load_dotenv()
 app = FastAPI(title="MamoDoc", version="0.1.0")
 
 
+@app.get("/")
+def root(request: Request) -> dict[str, str | dict[str, str]]:
+    base = str(request.base_url).rstrip("/")
+    return {
+        "service": "MamoDoc",
+        "health": f"{base}/health",
+        "docs": f"{base}/docs",
+        "generate_credit_note": {
+            "method": "POST",
+            "url": f"{base}/v1/credit-note/bank-transfer",
+            "body": "multipart/form-data; field 'file' = invoice PDF",
+        },
+    }
+
+
 def _safe_filename(name: str) -> str:
     base = os.path.basename(name or "invoice")
     base = re.sub(r"[^\w.\-]+", "_", base, flags=re.UNICODE)
