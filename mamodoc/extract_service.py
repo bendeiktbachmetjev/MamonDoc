@@ -8,8 +8,37 @@ from mamodoc.cn_counter import peek_next_credit_note_number
 from mamodoc.defaults import DEFAULT_GEMINI_MODEL
 from mamodoc.gemini_extract import _default_cn_date
 from mamodoc.gemini_ui_extract import extract_invoice_ui_from_pdf
-from mamodoc.models_ui import InvoiceUiGeminiPayload
+from mamodoc.models_ui import InvoiceUiGeminiPayload, UiInvoiceLine
 from mamodoc.money_format import decimal_to_float_safe, format_eur, parse_eur_amount, split_template_date
+
+
+def _resolved_line_gross(row: UiInvoiceLine) -> Decimal:
+    """
+    Pick a single gross amount per invoice line for totals and discount math.
+
+    The model sometimes puts a truncated value in gross_display (e.g. '87,00 EUR' from
+    a total '679,87 EUR') while gross_eur still holds the full amount. When both parse
+    and differ materially, the larger value is usually the real invoice total on these docs.
+    """
+    d = parse_eur_amount(row.gross_display)
+    e: Decimal | None = None
+    if row.gross_eur is not None:
+        try:
+            e = Decimal(str(row.gross_eur))
+        except Exception:
+            e = None
+
+    if d is None or d <= 0:
+        return e if e is not None and e > 0 else Decimal("0")
+    if e is None or e <= 0:
+        return d
+
+    bigger = max(d, e)
+    smaller = min(d, e)
+    # Within 5%: treat as same total, keep display-derived for consistency with PDF wording.
+    if (bigger - smaller) / bigger <= Decimal("0.05"):
+        return d
+    return bigger
 
 
 def _fmt_discount_pct(pct: Decimal) -> str:
@@ -52,12 +81,7 @@ def build_bundle_from_payload(
 
     grosses: list[Decimal] = []
     for row in payload.invoice_lines:
-        parsed = parse_eur_amount(row.gross_display)
-        if parsed is None and row.gross_eur is not None:
-            parsed = Decimal(str(row.gross_eur))
-        if parsed is None:
-            parsed = Decimal("0")
-        grosses.append(parsed)
+        grosses.append(_resolved_line_gross(row))
 
     pct = Decimal(str(discount_percent))
     disc_amts, nets = _allocate_discounts(grosses, pct)

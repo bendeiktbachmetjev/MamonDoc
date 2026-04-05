@@ -4,7 +4,7 @@ from decimal import Decimal
 from typing import Any
 
 from mamodoc.models import CreditNoteGeminiPayload
-from mamodoc.money_format import format_eur, parse_eur_amount
+from mamodoc.money_format import format_eur, normalize_date_comma_spacing, parse_eur_amount
 
 # Fallback when the model omits bank lines (layout still matches template).
 _DEFAULT_BANK: dict[str, str] = {
@@ -79,14 +79,14 @@ def build_docxtpl_context_from_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
         inv1_invoice_number = parts[0].strip() if parts else ""
         tail = parts[1].strip() if len(parts) > 1 else ""
         cy = (row0.get("comma_year") or "").strip()
-        inv1_invoice_date = (
+        inv1_invoice_date = normalize_date_comma_spacing(
             f"{tail}{cy}".strip()
             if tail
             else (cy.lstrip(",").strip() or (bundle.get("credit_note_date") or ""))
         )
     else:
         inv1_invoice_number = ""
-        inv1_invoice_date = bundle.get("credit_note_date") or ""
+        inv1_invoice_date = normalize_date_comma_spacing(bundle.get("credit_note_date") or "")
 
     return {
         "cn_number": bundle.get("credit_note_number") or "",
@@ -133,7 +133,7 @@ def enrich_legacy_credit_note_context(
     inv1_invoice_number = parts[0].strip() if parts else ""
     tail = parts[1].strip() if len(parts) > 1 else ""
     cy = (payload.inv1_comma_year or "").strip()
-    inv1_invoice_date = (
+    inv1_invoice_date = normalize_date_comma_spacing(
         f"{tail}{cy}".strip()
         if tail
         else (cy.lstrip(",").strip() or cn_date)

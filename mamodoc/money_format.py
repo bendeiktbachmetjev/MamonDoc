@@ -44,14 +44,24 @@ def decimal_to_float_safe(d: Decimal) -> float:
     return float(d)
 
 
+def normalize_date_comma_spacing(text: str) -> str:
+    """
+    Fix missing space after comma in date phrases (e.g. 'April 03,2026' -> 'April 03, 2026').
+    """
+    if not text:
+        return text
+    return re.sub(r",([^\s,])", r", \1", text.strip())
+
+
 def split_template_date(date_text: str) -> tuple[str, str]:
     """
-    'April 03, 2026' -> ('April 03', ', 2026  ') for docxtpl inv*_id_before_comma / inv*_comma_year.
+    'April 03, 2026' or 'April 03,2026' -> ('April 03', ', 2026  ') for docxtpl inv*_id_before_comma / inv*_comma_year.
     """
     t = (date_text or "").strip()
     if not t:
         return "", ", 2026  "
     if "," in t:
         left, right = t.rsplit(",", 1)
-        return left.strip(), f",{right.strip()}  "
+        # Always ", YYYY" when rejoined with left (Gemini often returns "April 03,2026").
+        return left.strip(), f", {right.strip()}  "
     return t, ", 2026  "

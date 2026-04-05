@@ -17,8 +17,8 @@ Extract:
 - currency: ISO-like code, default EUR.
 - invoice_lines: for EACH distinct invoice total on this PDF, one row:
   - invoice_number: serial like UNI 2604/02
-  - gross_display: gross total string as printed (with EUR if shown)
-  - gross_eur: number (dot decimal) if reliable, else null
+  - gross_display: full INVOICE TOTAL / AMOUNT DUE as printed (with EUR if shown), not a line subtotal, not VAT-only, not a fragment of the total (e.g. for 679,87 EUR use exactly that string, not 87,00 EUR)
+  - gross_eur: same total as gross_display as a number (dot decimal), e.g. 679.87 — must match the full amount due
   - invoice_date_text: invoice date as on the PDF, e.g. "April 03, 2026" (for credit note wording)
 - suggested_credit_note_number: plausible next credit note id (UNI ######) if inferable, else null
 - suggested_credit_note_date: suggested credit note issue date text, else null
