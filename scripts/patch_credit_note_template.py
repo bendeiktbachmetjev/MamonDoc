@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
 """
-Build docxtpl-enabled credit note template from Company/UNI 2026.03.21.doc (macOS textutil).
-Run from repo root: python scripts/patch_credit_note_template.py
+Inject docxtpl placeholders into the UNI credit note body.
 
-For logos / exact corporate graphics: open the .doc in Microsoft Word, Save As .docx into
-templates/UNI_2026.03.21.docx, then run this script (or rely on textutil if your doc has no images).
+Source .docx priority (best first):
+  1) templates/UNI_manual_export.docx — export from Microsoft Word (keeps logos, headers, borders, media).
+  2) LibreOffice headless conversion from Company/UNI 2026.03.21.doc (often keeps images better than textutil).
+  3) macOS textutil (usually STRIPS images — last resort).
+  4) Existing templates/UNI_2026.03.21.docx
+
+Output: templates/credit_note_bank_transfer.docx
+
+Run from repo root: python scripts/patch_credit_note_template.py
 """
 
 from __future__ import annotations
@@ -13,46 +19,106 @@ import platform
 import shutil
 import subprocess
 import sys
+import tempfile
 import zipfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 DOC_SRC = REPO / "Company" / "UNI 2026.03.21.doc"
+MANUAL_DOCX = REPO / "templates" / "UNI_manual_export.docx"
 SRC = REPO / "templates" / "UNI_2026.03.21.docx"
 OUT = REPO / "templates" / "credit_note_bank_transfer.docx"
 
 
+def _soffice_candidates() -> list[str]:
+    return [
+        "soffice",
+        "/Applications/LibreOffice.app/Contents/MacOS/soffice",
+        "/usr/bin/soffice",
+    ]
+
+
+def _convert_via_libreoffice(doc_path: Path, dest_docx: Path) -> bool:
+    if not doc_path.is_file():
+        return False
+    tmpd = tempfile.mkdtemp(prefix="lo_docx_")
+    try:
+        for cmd in _soffice_candidates():
+            try:
+                r = subprocess.run(
+                    [cmd, "--headless", "--convert-to", "docx", "-outdir", tmpd, str(doc_path)],
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                )
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                continue
+            if r.returncode != 0:
+                continue
+            produced = Path(tmpd) / f"{doc_path.stem}.docx"
+            if produced.is_file():
+                dest_docx.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(produced, dest_docx)
+                print(f"LibreOffice converted -> {dest_docx.relative_to(REPO)}")
+                return True
+    finally:
+        shutil.rmtree(tmpd, ignore_errors=True)
+    return False
+
+
+def _convert_via_textutil(doc_path: Path, dest_docx: Path) -> bool:
+    if platform.system() != "Darwin" or not doc_path.is_file():
+        return False
+    dest_docx.parent.mkdir(parents=True, exist_ok=True)
+    r = subprocess.run(
+        ["textutil", "-convert", "docx", "-output", str(dest_docx), str(doc_path)],
+        capture_output=True,
+        text=True,
+    )
+    if r.returncode != 0:
+        print("textutil failed:", r.stderr or r.stdout, file=sys.stderr)
+        return False
+    print(f"textutil converted -> {dest_docx.relative_to(REPO)} (images often missing)")
+    return True
+
+
+def resolve_source_docx() -> Path:
+    if MANUAL_DOCX.is_file():
+        print(
+            f"Using {MANUAL_DOCX.relative_to(REPO)} (Word export — letterhead and images preserved)."
+        )
+        return MANUAL_DOCX
+
+    if _convert_via_libreoffice(DOC_SRC, SRC):
+        return SRC
+
+    if _convert_via_textutil(DOC_SRC, SRC):
+        return SRC
+
+    if SRC.is_file():
+        print(
+            f"Using existing {SRC.relative_to(REPO)}. If output has no logo, add "
+            f"{MANUAL_DOCX.name} (Word Save As .docx) — see PROJECT.md."
+        )
+        return SRC
+
+    raise SystemExit(
+        f"No source .docx. Either:\n"
+        f"  - Save As: Company/UNI 2026.03.21.doc -> {MANUAL_DOCX}\n"
+        f"  - Or install LibreOffice and keep {DOC_SRC.name} in Company/\n"
+        f"  - Or on macOS keep the .doc in Company/ for textutil (no images)."
+    )
+
+
 def main() -> None:
-    if DOC_SRC.is_file() and platform.system() == "Darwin":
-        SRC.parent.mkdir(parents=True, exist_ok=True)
-        r = subprocess.run(
-            [
-                "textutil",
-                "-convert",
-                "docx",
-                "-output",
-                str(SRC),
-                str(DOC_SRC),
-            ],
-            capture_output=True,
-            text=True,
-        )
-        if r.returncode != 0:
-            print("textutil failed:", r.stderr or r.stdout, file=sys.stderr)
-            sys.exit(1)
-        print(f"Converted {DOC_SRC.name} -> {SRC.relative_to(REPO)}")
-    elif not SRC.is_file():
-        raise SystemExit(
-            f"Missing {SRC}. On macOS place {DOC_SRC.name} in Company/ and run again, "
-            "or copy a .docx export from Word as templates/UNI_2026.03.21.docx."
-        )
+    src_path = resolve_source_docx()
 
     tmp = REPO / "templates" / "_patch_credit_note"
     if tmp.exists():
         shutil.rmtree(tmp)
     tmp.mkdir(parents=True)
 
-    with zipfile.ZipFile(SRC, "r") as zin:
+    with zipfile.ZipFile(src_path, "r") as zin:
         zin.extractall(tmp)
 
     doc_xml = (tmp / "word" / "document.xml").read_text(encoding="utf-8")
@@ -151,6 +217,20 @@ def main() -> None:
 
     shutil.rmtree(tmp)
     print(f"Wrote {OUT}")
+    _print_letterhead_hint(OUT)
+
+
+def _print_letterhead_hint(docx: Path) -> None:
+    with zipfile.ZipFile(docx) as z:
+        names = z.namelist()
+    has_header = any(n.startswith("word/header") and n.endswith(".xml") for n in names)
+    has_media = any(n.startswith("word/media/") for n in names)
+    if not has_header and not has_media:
+        print(
+            "\nWARNING: No word/header* and no word/media — output will look plain (typical for textutil).\n"
+            f"  Fix: export from Word to {MANUAL_DOCX.relative_to(REPO)} and re-run this script.\n"
+            f"  Check: python scripts/check_template_letterhead.py\n"
+        )
 
 
 if __name__ == "__main__":

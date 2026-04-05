@@ -8,10 +8,17 @@
 
 ## Важно про файлы Word
 
-- Файлы вида `~$....doc` — это **служебный lock-файл** Microsoft Word, а не шаблон. Редактировать нужно сам документ, у вас это **`Company/UNI 2026.03.21.doc`**.
-- Для Python используется **`.docx`**. На macOS скрипт **`scripts/patch_credit_note_template.py`** сам конвертирует `Company/UNI 2026.03.21.doc` → `templates/UNI_2026.03.21.docx` и собирает **`templates/credit_note_bank_transfer.docx`** с плейсхолдерами `{{ ... }}`, **не ломая** исходную вёрстку (шрифты, отступы, табы в строках инвойсов).
-- **Логотип и фирменная графика:** конвертация через `textutil` иногда **не переносит картинки**. Чтобы PDF визуально совпадал с эталоном, откройте `.doc` в **Microsoft Word → Сохранить как .docx** в `templates/UNI_2026.03.21.docx`, затем снова запустите `patch_credit_note_template.py`.
-- **Красивый Word как ваш CN:** на сайте после *Extract* нажмите **Download Word** — подставляются поля из ИИ, **ваш % скидки** (как на форме) и тот же шаблон UNI. Старый режим без `discount_percent` на `POST /v1/credit-note/bank-transfer` по-прежнему зовёт полную модель под старый JSON.
+- Файлы вида `~$....doc` — это **служебный lock-файл** Microsoft Word. Рабочий оригинал — **`Company/UNI 2026.03.21.doc`**.
+- **Почему на выходе «голый» документ без логотипа и полосок:** конвертация **macOS `textutil`** и часть других конвертеров **выкидывают** `word/header*.xml`, `word/footer*.xml` и **`word/media/`** (картинки). Тогда в архиве `.docx` остаётся почти только `document.xml` — программа **не может** нарисовать бланк заново, она лишь подставляет текст в то, что есть в шаблоне.
+- **Правильный способ (как на вашем эталоне с UNIMARS):**
+  1. Откройте **`Company/UNI 2026.03.21.doc`** в **Microsoft Word** (не Pages).
+  2. **Файл → Сохранить как → Word Document (.docx)** в файл **`templates/UNI_manual_export.docx`** (имя важно).
+  3. В корне репозитория выполните: **`python scripts/patch_credit_note_template.py`**.  
+     Скрипт **сначала** ищет `UNI_manual_export.docx` и только если его нет — пробует LibreOffice / `textutil`.
+  4. Проверка: **`python scripts/check_template_letterhead.py`** — должны быть **header/footer** и/или **media** (картинки).
+- Если после экспорта из Word скрипт патча **падает** с «substring not found», в теле документа должны остаться **те же примеры текста**, что в исходном UNI (V SHIPS FRANCE SAS, UNI 2603/22/B, суммы и т.д.) — патч заменяет конкретные строки. Либо вручную вставьте в Word те же `{{ переменные }}`, что в `scripts/patch_credit_note_template.py`, и положите готовый файл сразу в **`templates/credit_note_bank_transfer.docx`** (без патча).
+- **Альтернатива:** установить **LibreOffice** и оставить только `.doc` в `Company/` — скрипт попробует `soffice --convert-to docx` (часто сохраняет графику лучше, чем `textutil`).
+- **Красивый Word:** на сайте *Extract* → **Download Word** подставляет данные в **`templates/credit_note_bank_transfer.docx`**. Режим без `discount_percent` на API по-прежнему использует старый полный JSON от Gemini.
 
 ## Как устроено в репозитории
 
@@ -28,6 +35,7 @@
 | `mamodoc/credit_note_context.py` | Маппинг в переменные `credit_note_bank_transfer.docx` |
 | `mamodoc/cn_counter.py` | Авто-номер credit note (+1), файл `data/cn_counter.json` |
 | `mamodoc/web/index.html` | Страница: загрузка PDF и выбор скидки |
+| `scripts/check_template_letterhead.py` | Проверка: есть ли в шаблоне шапка/картинки |
 | `Procfile` | Старт веб-процесса на Railway |
 | `examples/*.json` | Пример полезной нагрузки без вызова API |
 
