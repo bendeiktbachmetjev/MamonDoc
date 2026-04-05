@@ -4,6 +4,7 @@ import tempfile
 from pathlib import Path
 from typing import BinaryIO
 
+from mamodoc.defaults import DEFAULT_GEMINI_MODEL
 from mamodoc.gemini_extract import extract_from_invoice_pdf, resolve_cn_meta
 from mamodoc.models import CreditNoteGeminiPayload
 from mamodoc.render_doc import render_credit_note_bank_transfer
@@ -18,7 +19,7 @@ def generate_bank_transfer_credit_note(
     *,
     cn_number: str | None = None,
     cn_date: str | None = None,
-    model_name: str = "gemini-2.0-flash",
+    model_name: str = DEFAULT_GEMINI_MODEL,
     template_path: Path | None = None,
 ) -> tuple[bytes, CreditNoteGeminiPayload]:
     """

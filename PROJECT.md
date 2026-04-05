@@ -33,7 +33,8 @@
 1. Ключ: [Google AI Studio](https://aistudio.google.com/apikey).
 2. Локально: скопируйте `.env.example` в `.env`, вставьте `GEMINI_API_KEY=...`.
 3. **Только Railway**: локальный `.env` **не обязателен**. Достаточно в Variables сервиса задать **`GEMINI_API_KEY`** — приложение читает обычные переменные окружения; `load_dotenv()` просто подхватит `.env`, если файл есть.
-4. Не коммитьте `.env` в Git.
+4. Модель по умолчанию: **`gemini-2.5-flash`** (см. `mamodoc/defaults.py`). Для новых ключей **`gemini-2.0-flash` больше не выдаётся**. Своя модель: переменная **`GEMINI_MODEL`** (например `gemini-1.5-flash`, если провайдер вернёт 404).
+5. Не коммитьте `.env` в Git.
 
 ## Деплой на Railway
 

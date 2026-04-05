@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from mamodoc.defaults import DEFAULT_GEMINI_MODEL
 from mamodoc.models import CreditNoteGeminiPayload
 
 SYSTEM_INSTRUCTION = """You are a document analyst for a Lithuanian ship provisions supplier (Unimars).
@@ -64,7 +65,7 @@ def extract_from_invoice_pdf(
     pdf_path: Path,
     *,
     api_key: str | None = None,
-    model_name: str = "gemini-2.0-flash",
+    model_name: str = DEFAULT_GEMINI_MODEL,
 ) -> CreditNoteGeminiPayload:
     import google.generativeai as genai
 

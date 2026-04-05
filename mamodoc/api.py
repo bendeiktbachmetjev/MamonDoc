@@ -10,6 +10,7 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi import Query
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
+from mamodoc.defaults import DEFAULT_GEMINI_MODEL
 from mamodoc.extract_service import extract_ui_bundle
 from mamodoc.pipeline import generate_bank_transfer_credit_note
 
@@ -85,7 +86,7 @@ async def extract_ui(
     if discount_percent < 0 or discount_percent > 100:
         raise HTTPException(status_code=400, detail="discount_percent must be between 0 and 100")
 
-    model_name = (model or os.environ.get("GEMINI_MODEL") or "gemini-2.0-flash").strip()
+    model_name = (model or os.environ.get("GEMINI_MODEL") or DEFAULT_GEMINI_MODEL).strip()
 
     try:
         data = extract_ui_bundle(body, discount_percent=discount_percent, model_name=model_name)
@@ -117,7 +118,7 @@ async def credit_note_bank_transfer(
     if not body:
         raise HTTPException(status_code=400, detail="Empty file")
 
-    model_name = (model or os.environ.get("GEMINI_MODEL") or "gemini-2.0-flash").strip()
+    model_name = (model or os.environ.get("GEMINI_MODEL") or DEFAULT_GEMINI_MODEL).strip()
 
     try:
         docx_bytes, payload = generate_bank_transfer_credit_note(

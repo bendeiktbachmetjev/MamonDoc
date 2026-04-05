@@ -5,6 +5,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from mamodoc.cn_counter import allocate_next_credit_note_number
+from mamodoc.defaults import DEFAULT_GEMINI_MODEL
 from mamodoc.gemini_extract import _default_cn_date
 from mamodoc.gemini_ui_extract import extract_invoice_ui_from_pdf
 from mamodoc.money_format import decimal_to_float_safe, format_eur, parse_eur_amount
@@ -14,7 +15,7 @@ def extract_ui_bundle(
     pdf_bytes: bytes,
     *,
     discount_percent: float,
-    model_name: str = "gemini-2.0-flash",
+    model_name: str = DEFAULT_GEMINI_MODEL,
 ) -> dict:
     tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
     try:

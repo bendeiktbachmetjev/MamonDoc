@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+from mamodoc.defaults import DEFAULT_GEMINI_MODEL
 from mamodoc.models_ui import InvoiceUiGeminiPayload
 
 UI_INSTRUCTION = """You analyze a supplier PDF invoice (ship provisions, Unimars-style).
@@ -46,7 +47,7 @@ def extract_invoice_ui_from_pdf(
     pdf_path: Path,
     *,
     api_key: str | None = None,
-    model_name: str = "gemini-2.0-flash",
+    model_name: str = DEFAULT_GEMINI_MODEL,
 ) -> InvoiceUiGeminiPayload:
     import google.generativeai as genai
 

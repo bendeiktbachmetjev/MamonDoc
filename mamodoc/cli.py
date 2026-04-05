@@ -6,6 +6,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from mamodoc.defaults import DEFAULT_GEMINI_MODEL
 from mamodoc.gemini_extract import resolve_cn_meta
 from mamodoc.models import CreditNoteGeminiPayload
 from mamodoc.pipeline import generate_bank_transfer_credit_note
@@ -57,7 +58,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--model",
-        default="gemini-2.0-flash",
+        default=DEFAULT_GEMINI_MODEL,
         help="Gemini model id",
     )
     parser.add_argument(
