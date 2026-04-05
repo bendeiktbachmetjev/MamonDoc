@@ -8,6 +8,7 @@ from typing import Any
 
 from mamodoc.defaults import DEFAULT_GEMINI_MODEL
 from mamodoc.models import CreditNoteGeminiPayload
+from mamodoc.money_format import normalize_date_comma_spacing
 
 SYSTEM_INSTRUCTION = """You are a document analyst for a Lithuanian ship provisions supplier (Unimars).
 You receive a PDF invoice. Your job is to propose values for a CREDIT NOTE (Word template), not to copy the invoice layout.
@@ -20,7 +21,7 @@ Rules:
 - If there are two distinct invoice references to list (like two UNI numbers), set has_second_invoice true and fill inv2_*.
 - Discount lines: if the invoice does not show a discount but a credit note would, infer reasonable discount fields consistent with gross and net if you can; otherwise align gross==net and discount_pct '0' and discount_eur '0,00 EUR'.
 - Bank block: prefer supplier bank details from the invoice footer; otherwise use standard Unimars lines if visible.
-- suggested_cn_number / suggested_cn_date: propose a new credit note id and issue date (often invoice-related date unless context implies otherwise).
+- suggested_cn_number / suggested_cn_date: propose a new credit note id and issue date. suggested_cn_date MUST be the supplier invoice date as printed on the PDF (same wording if possible), NOT today's calendar date. If the invoice date is visible, never leave suggested_cn_date null.
 
 Respond with JSON only, no markdown. The JSON must match this shape (all keys required, use null only where specified optional):
 """
@@ -59,6 +60,16 @@ JSON_SHAPE: dict[str, Any] = {
 def _default_cn_date() -> str:
     dt = datetime.now()
     return f"{dt.strftime('%B')} {dt.day}, {dt.year}"
+
+
+def _infer_legacy_credit_note_date(payload: CreditNoteGeminiPayload) -> str:
+    """Rebuild date from inv1_id_before_comma + inv1_comma_year when suggested_cn_date is missing."""
+    parts = (payload.inv1_id_before_comma or "").split(" of ", 1)
+    tail = parts[1].strip() if len(parts) > 1 else ""
+    cy = (payload.inv1_comma_year or "").strip()
+    if tail:
+        return normalize_date_comma_spacing(f"{tail}{cy}".strip())
+    return ""
 
 
 def extract_from_invoice_pdf(
@@ -109,5 +120,9 @@ def resolve_cn_meta(
     if not num:
         raise ValueError("Credit note number missing: pass --cn-number or ensure model returns suggested_cn_number")
 
-    date_str = (cn_date or payload.suggested_cn_date or "").strip() or _default_cn_date()
+    date_str = (cn_date or payload.suggested_cn_date or "").strip()
+    if not date_str:
+        date_str = _infer_legacy_credit_note_date(payload)
+    if not date_str:
+        date_str = _default_cn_date()
     return num, date_str

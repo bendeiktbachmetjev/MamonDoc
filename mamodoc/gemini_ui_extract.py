@@ -19,9 +19,9 @@ Extract:
   - invoice_number: serial like UNI 2604/02
   - gross_display: full INVOICE TOTAL / AMOUNT DUE as printed (with EUR if shown), not a line subtotal, not VAT-only, not a fragment of the total (e.g. for 679,87 EUR use exactly that string, not 87,00 EUR)
   - gross_eur: same total as gross_display as a number (dot decimal), e.g. 679.87 — must match the full amount due
-  - invoice_date_text: invoice date as on the PDF, e.g. "April 03, 2026" (for credit note wording)
+  - invoice_date_text: REQUIRED when any date is visible on the PDF — copy the invoice issue date exactly as printed (e.g. "April 03, 2026"). Never invent a date.
 - suggested_credit_note_number: plausible next credit note id (UNI ######) if inferable, else null
-- suggested_credit_note_date: suggested credit note issue date text, else null
+- suggested_credit_note_date: use the SAME date as the supplier invoice on the PDF (same wording as printed). Do NOT use today's date. If you filled invoice_date_text, set this to the same value. Only null if no date is visible anywhere on the document.
 - supplier_name, supplier_city, supplier_country: seller (usually Unimars / Klaipėda / Lithuania) if visible
 - signer_company, signer_name: signatory block if visible, else use sensible defaults for Unimars
 - bank_name, bank_address, bank_swift, bank_account: supplier payee bank lines from invoice footer if visible; else empty string

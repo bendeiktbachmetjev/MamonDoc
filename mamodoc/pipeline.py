@@ -11,8 +11,8 @@ from mamodoc.credit_note_context import (
 )
 from mamodoc.template_paths import resolve_credit_note_template
 from mamodoc.defaults import DEFAULT_GEMINI_MODEL
-from mamodoc.extract_service import build_bundle_from_payload
-from mamodoc.gemini_extract import _default_cn_date, extract_from_invoice_pdf, resolve_cn_meta
+from mamodoc.extract_service import build_bundle_from_payload, resolve_ui_credit_note_date
+from mamodoc.gemini_extract import extract_from_invoice_pdf, resolve_cn_meta
 from mamodoc.gemini_ui_extract import extract_invoice_ui_from_pdf
 from mamodoc.models import CreditNoteGeminiPayload
 from mamodoc.render_doc import render_credit_note_bank_transfer
@@ -108,7 +108,7 @@ def generate_bank_transfer_credit_note_from_ui(
             commit_credit_note_number(cn)
         else:
             cn = allocate_next_credit_note_number(suggested_seed=payload.suggested_credit_note_number)
-        cn_dt = (cn_date or "").strip() or (payload.suggested_credit_note_date or "").strip() or _default_cn_date()
+        cn_dt = resolve_ui_credit_note_date(payload, (cn_date or "").strip() or None)
         bundle = build_bundle_from_payload(
             payload,
             discount_percent=discount_percent,

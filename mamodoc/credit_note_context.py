@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 from mamodoc.models import CreditNoteGeminiPayload
@@ -13,6 +13,29 @@ _DEFAULT_BANK: dict[str, str] = {
     "bank_swift": "S.W.I.F.T. :HABALT LT22",
     "bank_account": "Account N..:LT40 7300 0100 9417 8770",
 }
+
+
+def _computed_discount_from_bundle(
+    bundle: dict[str, Any],
+    *,
+    pct: Decimal,
+    currency: str,
+) -> str:
+    """
+    Discount EUR for Word: always (total gross before discount) × (user % / 100).
+    Does not read any discount text from the PDF — only numeric total from the bundle and discount_percent.
+    """
+    tb = bundle.get("total_before_discount") or {}
+    total_dec = parse_eur_amount(tb.get("display"))
+    if total_dec is None and tb.get("amount") is not None:
+        try:
+            total_dec = Decimal(str(tb["amount"]))
+        except Exception:
+            total_dec = None
+    if total_dec is None:
+        total_dec = Decimal("0")
+    disc = (total_dec * pct / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return format_eur(disc, currency=currency)
 
 
 def _fmt_discount_pct(pct: Decimal) -> str:
@@ -88,6 +111,10 @@ def build_docxtpl_context_from_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
         inv1_invoice_number = ""
         inv1_invoice_date = normalize_date_comma_spacing(bundle.get("credit_note_date") or "")
 
+    discount_eur_total = _computed_discount_from_bundle(bundle, pct=pct, currency=currency)
+    # One invoice: line discount in UNI template must match the same formula (not PDF text).
+    inv1_discount_eur_out = discount_eur_total if not has_second else a["discount_eur"]
+
     return {
         "cn_number": bundle.get("credit_note_number") or "",
         "cn_date": bundle.get("credit_note_date") or "",
@@ -100,7 +127,7 @@ def build_docxtpl_context_from_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
         "inv1_comma_year": a["comma_year"],
         "inv1_gross": a["gross"],
         "inv1_discount_pct": a["discount_pct"],
-        "inv1_discount_eur": a["discount_eur"],
+        "inv1_discount_eur": inv1_discount_eur_out,
         "inv1_net": a["net"],
         "has_second_invoice": has_second,
         "inv2_id_before_comma": b["id_before_comma"],
@@ -120,6 +147,8 @@ def build_docxtpl_context_from_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
         "inv1_invoice_number": inv1_invoice_number,
         "inv1_invoice_date": inv1_invoice_date,
         "total_gross": total_gross_display,
+        # Summary row: total discount (sum across invoice lines); inv1_discount_eur stays line-1 for UNI template
+        "discount_eur_total": discount_eur_total,
     }
 
 
@@ -147,3 +176,10 @@ def enrich_legacy_credit_note_context(
     ctx["inv1_invoice_number"] = inv1_invoice_number
     ctx["inv1_invoice_date"] = inv1_invoice_date
     ctx["total_gross"] = format_eur(g1 + g2, currency="EUR")
+    d1 = parse_eur_amount(payload.inv1_discount_eur) or Decimal("0")
+    d2 = (
+        (parse_eur_amount(payload.inv2_discount_eur) or Decimal("0"))
+        if payload.has_second_invoice
+        else Decimal("0")
+    )
+    ctx["discount_eur_total"] = format_eur(d1 + d2, currency="EUR")

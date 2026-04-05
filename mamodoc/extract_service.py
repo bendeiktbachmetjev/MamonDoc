@@ -9,7 +9,33 @@ from mamodoc.defaults import DEFAULT_GEMINI_MODEL
 from mamodoc.gemini_extract import _default_cn_date
 from mamodoc.gemini_ui_extract import extract_invoice_ui_from_pdf
 from mamodoc.models_ui import InvoiceUiGeminiPayload, UiInvoiceLine
-from mamodoc.money_format import decimal_to_float_safe, format_eur, parse_eur_amount, split_template_date
+from mamodoc.money_format import (
+    decimal_to_float_safe,
+    format_eur,
+    normalize_date_comma_spacing,
+    parse_eur_amount,
+    split_template_date,
+)
+
+
+def resolve_ui_credit_note_date(
+    payload: InvoiceUiGeminiPayload,
+    explicit_cn_date: str | None = None,
+) -> str:
+    """
+    Credit note date line for Word/UI: prefer explicit override, then model suggestion,
+    then first invoice date from the PDF — never fall back to 'today' until all are missing.
+    """
+    if explicit_cn_date and explicit_cn_date.strip():
+        return normalize_date_comma_spacing(explicit_cn_date.strip())
+    s = (payload.suggested_credit_note_date or "").strip()
+    if s:
+        return normalize_date_comma_spacing(s)
+    for row in payload.invoice_lines or []:
+        dt = (row.invoice_date_text or "").strip()
+        if dt:
+            return normalize_date_comma_spacing(dt)
+    return _default_cn_date()
 
 
 def _resolved_line_gross(row: UiInvoiceLine) -> Decimal:
@@ -76,7 +102,7 @@ def build_bundle_from_payload(
     cn_date: str,
 ) -> dict:
     currency = (payload.currency or "EUR").strip() or "EUR"
-    cn_date_f = (cn_date or "").strip() or (payload.suggested_credit_note_date or "").strip() or _default_cn_date()
+    cn_date_f = resolve_ui_credit_note_date(payload, (cn_date or "").strip() or None)
     fallback_date = (payload.suggested_credit_note_date or "").strip() or cn_date_f
 
     grosses: list[Decimal] = []
@@ -164,10 +190,9 @@ def extract_ui_bundle(
         Path(tmp.name).unlink(missing_ok=True)
 
     cn_number = peek_next_credit_note_number(suggested_seed=payload.suggested_credit_note_number)
-    cn_date = (payload.suggested_credit_note_date or "").strip() or _default_cn_date()
     return build_bundle_from_payload(
         payload,
         discount_percent=discount_percent,
         cn_number=cn_number,
-        cn_date=cn_date,
+        cn_date="",
     )
