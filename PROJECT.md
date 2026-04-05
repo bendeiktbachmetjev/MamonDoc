@@ -19,13 +19,35 @@
 | `mamodoc/models.py` | Pydantic-схема полей = переменные шаблона |
 | `mamodoc/render_doc.py` | Рендер через **docxtpl** (Jinja2 внутри Word) |
 | `mamodoc/cli.py` | CLI: PDF → JSON → `.docx` |
+| `mamodoc/pipeline.py` | Общая логика: PDF → Gemini → байты `.docx` |
+| `mamodoc/api.py` | HTTP API для деплоя (FastAPI + uvicorn) |
+| `Procfile` | Старт веб-процесса на Railway |
 | `examples/*.json` | Пример полезной нагрузки без вызова API |
 
 ## API-ключ
 
 1. Ключ: [Google AI Studio](https://aistudio.google.com/apikey).
 2. Локально: скопируйте `.env.example` в `.env`, вставьте `GEMINI_API_KEY=...`.
-3. **GitHub / Railway**: не коммитьте `.env`; в Railway задайте переменную окружения `GEMINI_API_KEY` в настройках сервиса.
+3. **Только Railway**: локальный `.env` **не обязателен**. Достаточно в Variables сервиса задать **`GEMINI_API_KEY`** — приложение читает обычные переменные окружения; `load_dotenv()` просто подхватит `.env`, если файл есть.
+4. Не коммитьте `.env` в Git.
+
+## Деплой на Railway
+
+1. Подключите репозиторий к Railway, создайте **сервис** из этого репо.
+2. В **Variables** добавьте **`GEMINI_API_KEY`** (и при желании **`MAMODOC_API_KEY`** — см. ниже).
+3. Railway подхватит **`Procfile`**: поднимется **FastAPI** на порту из **`PORT`**.
+4. Проверка: `GET https://<ваш-домен>/health` → `{"status":"ok"}`.
+5. Генерация: `POST /v1/credit-note/bank-transfer`, тело **`multipart/form-data`**, поле файла **`file`** = PDF инвойса. Опционально формы: `cn_number`, `cn_date`, `model`. Query: `include_json=true` — ответ JSON с `docx_base64` и полями модели.
+
+Пример (без защиты `MAMODOC_API_KEY`):
+
+```bash
+curl -sS -X POST "https://YOUR_APP.up.railway.app/v1/credit-note/bank-transfer" \
+  -F "file=@Company/I ELBSTROM 26:02.pdf" \
+  -o credit_note.docx
+```
+
+Если задан **`MAMODOC_API_KEY`**, добавьте заголовок: **`Authorization: Bearer <тот же секрет>`** — так публичный URL не остаётся полностью открытым.
 
 ## Команды
 

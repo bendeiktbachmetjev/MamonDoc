@@ -6,8 +6,9 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from mamodoc.gemini_extract import extract_from_invoice_pdf, resolve_cn_meta
+from mamodoc.gemini_extract import resolve_cn_meta
 from mamodoc.models import CreditNoteGeminiPayload
+from mamodoc.pipeline import generate_bank_transfer_credit_note
 from mamodoc.render_doc import render_credit_note_bank_transfer
 
 
@@ -79,28 +80,38 @@ def main() -> None:
 
     if args.from_json:
         payload = CreditNoteGeminiPayload.model_validate_json(args.from_json.read_text(encoding="utf-8"))
+        cn_number, cn_date = resolve_cn_meta(payload, cn_number=args.cn_number, cn_date=args.cn_date)
+        ctx = payload.to_docxtpl_context(cn_number=cn_number, cn_date=cn_date)
+        out = args.output
+        if out is None:
+            stem = args.from_json.stem
+            out = root / "output" / f"{stem}_credit_note.docx"
+        render_credit_note_bank_transfer(args.template, ctx, out)
     else:
         if args.invoice_pdf is None:
             raise SystemExit("invoice_pdf is required unless --from-json is set")
         if not args.invoice_pdf.is_file():
             raise SystemExit(f"Invoice PDF not found: {args.invoice_pdf}")
-        payload = extract_from_invoice_pdf(args.invoice_pdf, model_name=args.model)
+        docx_bytes, payload = generate_bank_transfer_credit_note(
+            args.invoice_pdf,
+            cn_number=args.cn_number,
+            cn_date=args.cn_date,
+            model_name=args.model,
+            template_path=args.template,
+        )
         if args.dump_json:
             args.dump_json.parent.mkdir(parents=True, exist_ok=True)
             args.dump_json.write_text(
                 payload.model_dump_json(indent=2, ensure_ascii=False),
                 encoding="utf-8",
             )
+        out = args.output
+        if out is None:
+            stem = args.invoice_pdf.stem
+            out = root / "output" / f"{stem}_credit_note.docx"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(docx_bytes)
 
-    cn_number, cn_date = resolve_cn_meta(payload, cn_number=args.cn_number, cn_date=args.cn_date)
-    ctx = payload.to_docxtpl_context(cn_number=cn_number, cn_date=cn_date)
-
-    out = args.output
-    if out is None:
-        stem = args.invoice_pdf.stem if args.invoice_pdf else args.from_json.stem
-        out = root / "output" / f"{stem}_credit_note.docx"
-
-    render_credit_note_bank_transfer(args.template, ctx, out)
     print(f"Wrote {out}")
 
 
