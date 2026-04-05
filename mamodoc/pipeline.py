@@ -5,7 +5,11 @@ from pathlib import Path
 from typing import BinaryIO
 
 from mamodoc.cn_counter import allocate_next_credit_note_number, commit_credit_note_number
-from mamodoc.credit_note_context import build_docxtpl_context_from_bundle
+from mamodoc.credit_note_context import (
+    build_docxtpl_context_from_bundle,
+    enrich_legacy_credit_note_context,
+)
+from mamodoc.template_paths import resolve_credit_note_template
 from mamodoc.defaults import DEFAULT_GEMINI_MODEL
 from mamodoc.extract_service import build_bundle_from_payload
 from mamodoc.gemini_extract import _default_cn_date, extract_from_invoice_pdf, resolve_cn_meta
@@ -31,7 +35,7 @@ def generate_bank_transfer_credit_note(
     Returns (.docx bytes, extraction payload).
     """
     root = _repo_root()
-    tpl = template_path or (root / "templates" / "credit_note_bank_transfer.docx")
+    tpl = resolve_credit_note_template(root, template_path)
     if not tpl.is_file():
         raise FileNotFoundError(f"Template not found: {tpl}")
 
@@ -52,6 +56,7 @@ def generate_bank_transfer_credit_note(
         payload = extract_from_invoice_pdf(pdf_path, model_name=model_name)
         cn_num, cn_dt = resolve_cn_meta(payload, cn_number=cn_number, cn_date=cn_date)
         ctx = payload.to_docxtpl_context(cn_number=cn_num, cn_date=cn_dt)
+        enrich_legacy_credit_note_context(ctx, payload, cn_dt)
         out_tmp = tempfile.NamedTemporaryFile(suffix=".docx", delete=False)
         out_tmp.close()
         out_path = Path(out_tmp.name)
@@ -79,7 +84,7 @@ def generate_bank_transfer_credit_note_from_ui(
     One Gemini (UI) extraction, user's discount %, then render the same Word layout as UNI template.
     """
     root = _repo_root()
-    tpl = template_path or (root / "templates" / "credit_note_bank_transfer.docx")
+    tpl = resolve_credit_note_template(root, template_path)
     if not tpl.is_file():
         raise FileNotFoundError(f"Template not found: {tpl}")
 

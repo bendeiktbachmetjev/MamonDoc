@@ -3,7 +3,8 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any
 
-from mamodoc.money_format import format_eur
+from mamodoc.models import CreditNoteGeminiPayload
+from mamodoc.money_format import format_eur, parse_eur_amount
 
 # Fallback when the model omits bank lines (layout still matches template).
 _DEFAULT_BANK: dict[str, str] = {
@@ -69,6 +70,24 @@ def build_docxtpl_context_from_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
     bank_swift = (bundle.get("bank_swift") or "").strip() or _DEFAULT_BANK["bank_swift"]
     bank_account = (bundle.get("bank_account") or "").strip() or _DEFAULT_BANK["bank_account"]
 
+    inv_lines = bundle.get("invoices") or []
+    total_gross_display = (bundle.get("total_before_discount") or {}).get("display") or ""
+    if inv_lines:
+        row0 = inv_lines[0]
+        idb = (row0.get("id_before_comma") or "").strip()
+        parts = idb.split(" of ", 1)
+        inv1_invoice_number = parts[0].strip() if parts else ""
+        tail = parts[1].strip() if len(parts) > 1 else ""
+        cy = (row0.get("comma_year") or "").strip()
+        inv1_invoice_date = (
+            f"{tail}{cy}".strip()
+            if tail
+            else (cy.lstrip(",").strip() or (bundle.get("credit_note_date") or ""))
+        )
+    else:
+        inv1_invoice_number = ""
+        inv1_invoice_date = bundle.get("credit_note_date") or ""
+
     return {
         "cn_number": bundle.get("credit_note_number") or "",
         "cn_date": bundle.get("credit_note_date") or "",
@@ -97,4 +116,34 @@ def build_docxtpl_context_from_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
         "bank_address": bank_address,
         "bank_swift": bank_swift,
         "bank_account": bank_account,
+        # templates/template new.docx (single visible invoice line)
+        "inv1_invoice_number": inv1_invoice_number,
+        "inv1_invoice_date": inv1_invoice_date,
+        "total_gross": total_gross_display,
     }
+
+
+def enrich_legacy_credit_note_context(
+    ctx: dict[str, Any],
+    payload: CreditNoteGeminiPayload,
+    cn_date: str,
+) -> None:
+    """Add variables used by templates/template new.docx when using the legacy Gemini payload path."""
+    parts = (payload.inv1_id_before_comma or "").split(" of ", 1)
+    inv1_invoice_number = parts[0].strip() if parts else ""
+    tail = parts[1].strip() if len(parts) > 1 else ""
+    cy = (payload.inv1_comma_year or "").strip()
+    inv1_invoice_date = (
+        f"{tail}{cy}".strip()
+        if tail
+        else (cy.lstrip(",").strip() or cn_date)
+    )
+    g1 = parse_eur_amount(payload.inv1_gross) or Decimal("0")
+    g2 = (
+        (parse_eur_amount(payload.inv2_gross) or Decimal("0"))
+        if payload.has_second_invoice
+        else Decimal("0")
+    )
+    ctx["inv1_invoice_number"] = inv1_invoice_number
+    ctx["inv1_invoice_date"] = inv1_invoice_date
+    ctx["total_gross"] = format_eur(g1 + g2, currency="EUR")

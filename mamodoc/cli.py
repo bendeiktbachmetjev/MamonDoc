@@ -11,6 +11,7 @@ from mamodoc.gemini_extract import resolve_cn_meta
 from mamodoc.models import CreditNoteGeminiPayload
 from mamodoc.pipeline import generate_bank_transfer_credit_note
 from mamodoc.render_doc import render_credit_note_bank_transfer
+from mamodoc.template_paths import resolve_credit_note_template
 
 
 def _repo_root() -> Path:
@@ -20,7 +21,7 @@ def _repo_root() -> Path:
 def main() -> None:
     load_dotenv()
     root = _repo_root()
-    default_tpl = root / "templates" / "credit_note_bank_transfer.docx"
+    default_tpl = resolve_credit_note_template(root, None)
 
     parser = argparse.ArgumentParser(
         description="Extract credit note fields from an invoice PDF via Gemini, render Word template.",
