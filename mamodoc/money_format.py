@@ -42,3 +42,16 @@ def format_eur(amount: Decimal, *, currency: str = "EUR") -> str:
 
 def decimal_to_float_safe(d: Decimal) -> float:
     return float(d)
+
+
+def split_template_date(date_text: str) -> tuple[str, str]:
+    """
+    'April 03, 2026' -> ('April 03', ', 2026  ') for docxtpl inv*_id_before_comma / inv*_comma_year.
+    """
+    t = (date_text or "").strip()
+    if not t:
+        return "", ", 2026  "
+    if "," in t:
+        left, right = t.rsplit(",", 1)
+        return left.strip(), f",{right.strip()}  "
+    return t, ", 2026  "

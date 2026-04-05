@@ -12,7 +12,10 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from mamodoc.defaults import DEFAULT_GEMINI_MODEL
 from mamodoc.extract_service import extract_ui_bundle
-from mamodoc.pipeline import generate_bank_transfer_credit_note
+from mamodoc.pipeline import (
+    generate_bank_transfer_credit_note,
+    generate_bank_transfer_credit_note_from_ui,
+)
 
 load_dotenv()
 
@@ -43,7 +46,7 @@ def api_meta(request: Request) -> dict[str, str | dict[str, str]]:
         "generate_credit_note": {
             "method": "POST",
             "url": f"{base}/v1/credit-note/bank-transfer",
-            "body": "multipart/form-data; field 'file' = invoice PDF",
+            "body": "multipart/form-data: file (PDF); optional discount_percent (uses UI extraction + UNI layout); optional cn_number, cn_date (match preview)",
         },
     }
 
@@ -109,6 +112,10 @@ async def credit_note_bank_transfer(
     file: UploadFile = File(..., description="Supplier invoice PDF"),
     cn_number: str | None = Form(None),
     cn_date: str | None = Form(None),
+    discount_percent: str | None = Form(
+        None,
+        description="If set, uses UI Gemini extraction + your discount; Word matches UNI template layout",
+    ),
     model: str | None = Form(None),
     include_json: bool = Query(False, description="If true, return JSON with base64 docx + payload"),
 ) -> Response:
@@ -120,13 +127,50 @@ async def credit_note_bank_transfer(
 
     model_name = (model or os.environ.get("GEMINI_MODEL") or DEFAULT_GEMINI_MODEL).strip()
 
+    stem = _safe_filename(file.filename or "invoice").removesuffix(".pdf") or "invoice"
+    out_name = f"{stem}_credit_note.docx"
+
+    use_ui_discount = discount_percent is not None and str(discount_percent).strip() != ""
+
     try:
-        docx_bytes, payload = generate_bank_transfer_credit_note(
-            body,
-            cn_number=cn_number,
-            cn_date=cn_date,
-            model_name=model_name,
-        )
+        if use_ui_discount:
+            raw = str(discount_percent).strip().replace(",", ".")
+            try:
+                dp = float(raw)
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail="Invalid discount_percent") from e
+            if dp < 0 or dp > 100:
+                raise HTTPException(status_code=400, detail="discount_percent must be between 0 and 100")
+            docx_bytes, bundle = generate_bank_transfer_credit_note_from_ui(
+                body,
+                discount_percent=dp,
+                cn_number=cn_number,
+                cn_date=cn_date,
+                model_name=model_name,
+            )
+            if include_json:
+                return JSONResponse(
+                    {
+                        "filename": out_name,
+                        "bundle": bundle,
+                        "docx_base64": base64.b64encode(docx_bytes).decode("ascii"),
+                    }
+                )
+        else:
+            docx_bytes, payload = generate_bank_transfer_credit_note(
+                body,
+                cn_number=cn_number,
+                cn_date=cn_date,
+                model_name=model_name,
+            )
+            if include_json:
+                return JSONResponse(
+                    {
+                        "filename": out_name,
+                        "payload": payload.model_dump(),
+                        "docx_base64": base64.b64encode(docx_bytes).decode("ascii"),
+                    }
+                )
     except RuntimeError as e:
         if "GEMINI_API_KEY" in str(e):
             raise HTTPException(
@@ -138,18 +182,6 @@ async def credit_note_bank_transfer(
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Generation failed: {e}") from e
-
-    stem = _safe_filename(file.filename or "invoice").removesuffix(".pdf") or "invoice"
-    out_name = f"{stem}_credit_note.docx"
-
-    if include_json:
-        return JSONResponse(
-            {
-                "filename": out_name,
-                "payload": payload.model_dump(),
-                "docx_base64": base64.b64encode(docx_bytes).decode("ascii"),
-            }
-        )
 
     return Response(
         content=docx_bytes,

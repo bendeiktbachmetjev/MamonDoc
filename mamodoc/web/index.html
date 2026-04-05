@@ -130,12 +130,18 @@
     th { color: var(--muted); font-weight: 500; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
     .links { margin-top: 1.5rem; font-size: 0.85rem; }
     .links a { color: var(--accent); }
+    .btn-row { display: flex; flex-direction: column; gap: 0.6rem; margin-top: 1rem; }
+    button.secondary {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
   </style>
 </head>
 <body>
   <main>
     <h1>MamoDoc</h1>
-    <p class="sub">Upload an invoice PDF, set the discount percent, then run AI extraction. Totals use your discount on the sum of invoice gross amounts.</p>
+    <p class="sub">Upload an invoice PDF, set the discount percent, then run AI extraction. Totals use your discount on the sum of invoice gross amounts. Download Word to get a .docx that keeps the same layout and styles as your <strong>UNI 2026.03.21</strong> template (fonts, spacing, bank block).</p>
 
     <form class="card" id="form">
       <div class="row cols-2">
@@ -153,7 +159,10 @@
         <input id="apiKey" name="apiKey" type="password" autocomplete="off" placeholder="Bearer token if server uses MAMODOC_API_KEY" />
         <p class="hint">Leave empty if the service is not protected. Stored only in this browser session (not saved).</p>
       </div>
-      <button type="submit" id="go">Extract with AI</button>
+      <div class="btn-row">
+        <button type="submit" id="go">Extract with AI</button>
+        <button type="button" class="secondary" id="dlWord" disabled>Download Word (.docx)</button>
+      </div>
       <div id="status" role="status"></div>
     </form>
 
@@ -175,6 +184,7 @@
       </div>
       <h3 style="margin:1.25rem 0 0.5rem;font-size:0.85rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;">Totals</h3>
       <dl class="kv" id="totals"></dl>
+      <p class="hint">Credit note number shown here is the next in sequence (preview only). If you download Word after extract, that same number is used and saved. If you download Word without extracting first, the server assigns the next number automatically.</p>
     </div>
 
     <p class="links"><a href="/api">API JSON</a> · <a href="/docs">OpenAPI docs</a> · <a href="/health">Health</a></p>
@@ -186,15 +196,23 @@
     const summary = document.getElementById("summary");
     const rows = document.getElementById("rows");
     const totals = document.getElementById("totals");
+    const dlWord = document.getElementById("dlWord");
+
+    let lastExtract = null;
 
     const savedKey = sessionStorage.getItem("mamodoc_api_key");
     if (savedKey) document.getElementById("apiKey").value = savedKey;
+
+    document.getElementById("file").addEventListener("change", () => {
+      dlWord.disabled = !document.getElementById("file").files.length;
+    });
 
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       statusEl.textContent = "";
       statusEl.className = "";
       out.hidden = true;
+      lastExtract = null;
 
       const discount = document.getElementById("discount").value;
       const fileInput = document.getElementById("file");
@@ -229,6 +247,7 @@
         }
         statusEl.textContent = "Done.";
         statusEl.className = "ok";
+        lastExtract = data;
         render(data);
         out.hidden = false;
       } catch (err) {
@@ -278,6 +297,52 @@
       tadd("Discount amount", data.discount_amount?.display || "—");
       tadd("Final after discount", data.final_after_discount?.display || "—");
     }
+
+    dlWord.addEventListener("click", async () => {
+      const fileInput = document.getElementById("file");
+      const discount = document.getElementById("discount").value;
+      const apiKey = document.getElementById("apiKey").value.trim();
+      if (!fileInput.files.length) {
+        statusEl.textContent = "Choose a PDF file first.";
+        statusEl.className = "err";
+        return;
+      }
+      statusEl.textContent = "";
+      statusEl.className = "";
+      const fd = new FormData();
+      fd.append("file", fileInput.files[0]);
+      fd.append("discount_percent", discount);
+      if (lastExtract?.credit_note_number) fd.append("cn_number", lastExtract.credit_note_number);
+      if (lastExtract?.credit_note_date) fd.append("cn_date", lastExtract.credit_note_date);
+      const headers = {};
+      if (apiKey) headers["Authorization"] = "Bearer " + apiKey;
+      dlWord.disabled = true;
+      statusEl.textContent = "Building Word…";
+      try {
+        const res = await fetch("/v1/credit-note/bank-transfer", { method: "POST", body: fd, headers });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          const msg = data.detail || res.statusText;
+          statusEl.textContent = typeof msg === "string" ? msg : JSON.stringify(msg);
+          statusEl.className = "err";
+          return;
+        }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = (fileInput.files[0].name || "invoice").replace(/\.pdf$/i, "") + "_credit_note.docx";
+        a.click();
+        URL.revokeObjectURL(url);
+        statusEl.textContent = "Word file downloaded.";
+        statusEl.className = "ok";
+      } catch (err) {
+        statusEl.textContent = String(err);
+        statusEl.className = "err";
+      } finally {
+        if (document.getElementById("file").files.length) dlWord.disabled = false;
+      }
+    });
   </script>
 </body>
 </html>

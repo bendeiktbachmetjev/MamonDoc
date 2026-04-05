@@ -15,16 +15,20 @@ Extract:
 - payer_company: legal payer / customer company (e.g. Kloska Rostock GmbH), NOT the vessel name.
 - vessel_name: vessel only (e.g. ELBSTROM), strip M/V.
 - currency: ISO-like code, default EUR.
-- invoice_lines: list of objects. For EACH distinct invoice document / series total on this PDF, one row:
+- invoice_lines: for EACH distinct invoice total on this PDF, one row:
   - invoice_number: serial like UNI 2604/02
-  - gross_display: gross total string as on document (with EUR if shown)
-  - gross_eur: number (use dot as decimal) if you can read it reliably, else null
+  - gross_display: gross total string as printed (with EUR if shown)
+  - gross_eur: number (dot decimal) if reliable, else null
+  - invoice_date_text: invoice date as on the PDF, e.g. "April 03, 2026" (for credit note wording)
 - suggested_credit_note_number: plausible next credit note id (UNI ######) if inferable, else null
-- suggested_credit_note_date: human date for the credit note if inferable, else null
+- suggested_credit_note_date: suggested credit note issue date text, else null
+- supplier_name, supplier_city, supplier_country: seller (usually Unimars / Klaipėda / Lithuania) if visible
+- signer_company, signer_name: signatory block if visible, else use sensible defaults for Unimars
+- bank_name, bank_address, bank_swift, bank_account: supplier payee bank lines from invoice footer if visible; else empty string
 
-If multiple invoice totals exist, include each separately. If one invoice spans pages, use ONE line with the final gross total.
+If one invoice spans pages, use ONE line with the final gross total.
 
-JSON shape (all top-level keys required):
+JSON shape (all top-level keys required; use "" where unknown):
 """
 
 UI_JSON_SHAPE: dict[str, Any] = {
@@ -36,10 +40,20 @@ UI_JSON_SHAPE: dict[str, Any] = {
             "invoice_number": "string",
             "gross_display": "string",
             "gross_eur": "number or null",
+            "invoice_date_text": "string or null",
         }
     ],
     "suggested_credit_note_number": "string or null",
     "suggested_credit_note_date": "string or null",
+    "supplier_name": "string",
+    "supplier_city": "string",
+    "supplier_country": "string",
+    "signer_company": "string",
+    "signer_name": "string",
+    "bank_name": "string",
+    "bank_address": "string",
+    "bank_swift": "string",
+    "bank_account": "string",
 }
 
 

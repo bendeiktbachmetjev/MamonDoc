@@ -1,23 +1,51 @@
 #!/usr/bin/env python3
 """
-One-off script: build docxtpl-enabled credit note template from converted UNI docx.
+Build docxtpl-enabled credit note template from Company/UNI 2026.03.21.doc (macOS textutil).
 Run from repo root: python scripts/patch_credit_note_template.py
+
+For logos / exact corporate graphics: open the .doc in Microsoft Word, Save As .docx into
+templates/UNI_2026.03.21.docx, then run this script (or rely on textutil if your doc has no images).
 """
 
 from __future__ import annotations
 
+import platform
 import shutil
+import subprocess
+import sys
 import zipfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
+DOC_SRC = REPO / "Company" / "UNI 2026.03.21.doc"
 SRC = REPO / "templates" / "UNI_2026.03.21.docx"
 OUT = REPO / "templates" / "credit_note_bank_transfer.docx"
 
 
 def main() -> None:
-    if not SRC.is_file():
-        raise SystemExit(f"Missing source template: {SRC}")
+    if DOC_SRC.is_file() and platform.system() == "Darwin":
+        SRC.parent.mkdir(parents=True, exist_ok=True)
+        r = subprocess.run(
+            [
+                "textutil",
+                "-convert",
+                "docx",
+                "-output",
+                str(SRC),
+                str(DOC_SRC),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if r.returncode != 0:
+            print("textutil failed:", r.stderr or r.stdout, file=sys.stderr)
+            sys.exit(1)
+        print(f"Converted {DOC_SRC.name} -> {SRC.relative_to(REPO)}")
+    elif not SRC.is_file():
+        raise SystemExit(
+            f"Missing {SRC}. On macOS place {DOC_SRC.name} in Company/ and run again, "
+            "or copy a .docx export from Word as templates/UNI_2026.03.21.docx."
+        )
 
     tmp = REPO / "templates" / "_patch_credit_note"
     if tmp.exists():

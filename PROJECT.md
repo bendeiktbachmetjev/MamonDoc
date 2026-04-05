@@ -9,7 +9,9 @@
 ## Важно про файлы Word
 
 - Файлы вида `~$....doc` — это **служебный lock-файл** Microsoft Word, а не шаблон. Редактировать нужно сам документ, у вас это **`Company/UNI 2026.03.21.doc`**.
-- Для Python используется **`.docx`**. Конвертация уже сделана в `templates/UNI_2026.03.21.docx`; рабочий шаблон с плейсхолдерами — **`templates/credit_note_bank_transfer.docx`** (строится скриптом `scripts/patch_credit_note_template.py`).
+- Для Python используется **`.docx`**. На macOS скрипт **`scripts/patch_credit_note_template.py`** сам конвертирует `Company/UNI 2026.03.21.doc` → `templates/UNI_2026.03.21.docx` и собирает **`templates/credit_note_bank_transfer.docx`** с плейсхолдерами `{{ ... }}`, **не ломая** исходную вёрстку (шрифты, отступы, табы в строках инвойсов).
+- **Логотип и фирменная графика:** конвертация через `textutil` иногда **не переносит картинки**. Чтобы PDF визуально совпадал с эталоном, откройте `.doc` в **Microsoft Word → Сохранить как .docx** в `templates/UNI_2026.03.21.docx`, затем снова запустите `patch_credit_note_template.py`.
+- **Красивый Word как ваш CN:** на сайте после *Extract* нажмите **Download Word** — подставляются поля из ИИ, **ваш % скидки** (как на форме) и тот же шаблон UNI. Старый режим без `discount_percent` на `POST /v1/credit-note/bank-transfer` по-прежнему зовёт полную модель под старый JSON.
 
 ## Как устроено в репозитории
 
@@ -22,7 +24,8 @@
 | `mamodoc/pipeline.py` | Общая логика: PDF → Gemini → байты `.docx` |
 | `mamodoc/api.py` | HTTP API для деплоя (FastAPI + uvicorn) |
 | `mamodoc/gemini_ui_extract.py` | Извлечение полей для веб-формы (плательщик, судно, инвойсы, суммы) |
-| `mamodoc/extract_service.py` | Сборка ответа UI: Gemini + ваш % скидки + счётчик номера CN |
+| `mamodoc/extract_service.py` | Сборка ответа UI: Gemini + ваш % скидки + счётчик (preview) |
+| `mamodoc/credit_note_context.py` | Маппинг в переменные `credit_note_bank_transfer.docx` |
 | `mamodoc/cn_counter.py` | Авто-номер credit note (+1), файл `data/cn_counter.json` |
 | `mamodoc/web/index.html` | Страница: загрузка PDF и выбор скидки |
 | `Procfile` | Старт веб-процесса на Railway |
