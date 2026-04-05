@@ -3,5 +3,6 @@
 __pycache__/
 *.py[cod]
 output/
+data/cn_counter.json
 .DS_Store
 ~$*

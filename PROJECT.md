@@ -21,6 +21,10 @@
 | `mamodoc/cli.py` | CLI: PDF → JSON → `.docx` |
 | `mamodoc/pipeline.py` | Общая логика: PDF → Gemini → байты `.docx` |
 | `mamodoc/api.py` | HTTP API для деплоя (FastAPI + uvicorn) |
+| `mamodoc/gemini_ui_extract.py` | Извлечение полей для веб-формы (плательщик, судно, инвойсы, суммы) |
+| `mamodoc/extract_service.py` | Сборка ответа UI: Gemini + ваш % скидки + счётчик номера CN |
+| `mamodoc/cn_counter.py` | Авто-номер credit note (+1), файл `data/cn_counter.json` |
+| `mamodoc/web/index.html` | Страница: загрузка PDF и выбор скидки |
 | `Procfile` | Старт веб-процесса на Railway |
 | `examples/*.json` | Пример полезной нагрузки без вызова API |
 
@@ -37,7 +41,11 @@
 2. В **Variables** добавьте **`GEMINI_API_KEY`** (и при желании **`MAMODOC_API_KEY`** — см. ниже).
 3. Railway подхватит **`Procfile`**: поднимется **FastAPI** на порту из **`PORT`**.
 4. Проверка: `GET https://<ваш-домен>/health` → `{"status":"ok"}`.
-5. Генерация: `POST /v1/credit-note/bank-transfer`, тело **`multipart/form-data`**, поле файла **`file`** = PDF инвойса. Опционально формы: `cn_number`, `cn_date`, `model`. Query: `include_json=true` — ответ JSON с `docx_base64` и полями модели.
+5. **Веб-форма**: откройте **`/`** в браузере — выберите PDF, укажите **размер скидки в процентах**, нажмите *Extract with AI*. Ответ покажет: плательщика, **следующий номер credit note** (каждый запрос +1 к сохранённому), дату, **название судна**, по каждому инвойсу отдельную сумму, **сумму до скидки**, **сумму скидки** и **итог после скидки** (скидка считается на сервере от вашего процента).
+6. JSON-метаданные эндпоинтов: `GET /api`.
+7. Генерация Word: `POST /v1/credit-note/bank-transfer`, тело **`multipart/form-data`**, поле **`file`** = PDF. Опционально формы: `cn_number`, `cn_date`, `model`. Query: `include_json=true` — ответ JSON с `docx_base64` и полями модели.
+
+**Номер credit note на сервере**: пишется в `data/cn_counter.json` (в Git не попадает). На Railway без **volume** файл сбрасывается при деплое — задайте **`CN_COUNTER_LAST`** (последний уже выданный номер, целое) или **`CN_INITIAL_NEXT`** / подсказку от модели при первом запуске; для постоянства смонтируйте том и **`CN_COUNTER_PATH`** (см. `.env.example`).
 
 Пример (без защиты `MAMODOC_API_KEY`):
 

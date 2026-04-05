@@ -3,26 +3,42 @@ from __future__ import annotations
 import base64
 import os
 import re
+from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi import Query
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 
+from mamodoc.extract_service import extract_ui_bundle
 from mamodoc.pipeline import generate_bank_transfer_credit_note
 
 load_dotenv()
 
 app = FastAPI(title="MamoDoc", version="0.1.0")
 
+_UI_PATH = Path(__file__).resolve().parent / "web" / "index.html"
 
-@app.get("/")
-def root(request: Request) -> dict[str, str | dict[str, str]]:
+
+@app.get("/", response_class=HTMLResponse)
+def ui_page() -> str:
+    if not _UI_PATH.is_file():
+        raise HTTPException(status_code=500, detail="UI template missing")
+    return _UI_PATH.read_text(encoding="utf-8")
+
+
+@app.get("/api")
+def api_meta(request: Request) -> dict[str, str | dict[str, str]]:
     base = str(request.base_url).rstrip("/")
     return {
         "service": "MamoDoc",
         "health": f"{base}/health",
         "docs": f"{base}/docs",
+        "extract_ui": {
+            "method": "POST",
+            "url": f"{base}/v1/extract-ui",
+            "body": "multipart/form-data; fields: file (PDF), discount_percent (number)",
+        },
         "generate_credit_note": {
             "method": "POST",
             "url": f"{base}/v1/credit-note/bank-transfer",
@@ -51,6 +67,39 @@ def _verify_bearer(authorization: str | None) -> None:
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.post("/v1/extract-ui")
+async def extract_ui(
+    request: Request,
+    file: UploadFile = File(..., description="Supplier invoice PDF"),
+    discount_percent: float = Form(0, description="Discount percent applied to the sum of invoice gross amounts"),
+    model: str | None = Form(None),
+) -> JSONResponse:
+    _verify_bearer(request.headers.get("Authorization"))
+
+    body = await file.read()
+    if not body:
+        raise HTTPException(status_code=400, detail="Empty file")
+
+    if discount_percent < 0 or discount_percent > 100:
+        raise HTTPException(status_code=400, detail="discount_percent must be between 0 and 100")
+
+    model_name = (model or os.environ.get("GEMINI_MODEL") or "gemini-2.0-flash").strip()
+
+    try:
+        data = extract_ui_bundle(body, discount_percent=discount_percent, model_name=model_name)
+    except RuntimeError as e:
+        if "GEMINI_API_KEY" in str(e):
+            raise HTTPException(
+                status_code=503,
+                detail="Server misconfiguration: GEMINI_API_KEY is not set",
+            ) from e
+        raise HTTPException(status_code=502, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Extraction failed: {e}") from e
+
+    return JSONResponse(data)
 
 
 @app.post("/v1/credit-note/bank-transfer")
